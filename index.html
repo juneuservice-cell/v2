@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="俊宥機電員工打卡系統 - 線上出勤打卡">
+    <meta name="theme-color" content="#3498db">
+    <title>俊宥機電員工打卡系統</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🕐</text></svg>">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Helvetica Neue", Arial, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .card {
+            max-width: 400px;
+            width: 90%;
+            background: #ffffff;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        h2 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 8px;
+        }
+        .clock {
+            text-align: center;
+            font-size: 28px;
+            font-weight: bold;
+            color: #3498db;
+            margin-bottom: 6px;
+            font-variant-numeric: tabular-nums;
+        }
+        .date-display {
+            text-align: center;
+            font-size: 14px;
+            color: #7f8c8d;
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin: 15px 0 5px;
+            color: #546e7a;
+            font-weight: bold;
+        }
+        select, input {
+            font-size: 18px;
+            padding: 12px;
+            width: 100%;
+            border: 1px solid #cfd8dc;
+            border-radius: 10px;
+            outline: none;
+            transition: border 0.3s;
+            background-color: #fff;
+        }
+        select:focus, input:focus {
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.15);
+        }
+        .note-hint {
+            display: none;
+            font-size: 13px;
+            color: #e67e22;
+            margin-top: 4px;
+        }
+        .note-hint.visible {
+            display: block;
+        }
+        button {
+            margin-top: 30px;
+            width: 100%;
+            padding: 15px;
+            font-size: 20px;
+            font-weight: bold;
+            background: #3498db;
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background 0.3s, transform 0.1s;
+        }
+        button:hover { background: #2980b9; }
+        button:active { transform: scale(0.98); }
+        button:disabled { background: #bdc3c7; cursor: not-allowed; transform: none; }
+        #status {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 16px;
+            min-height: 24px;
+        }
+        .loading { color: #3498db; }
+        .success { color: #27ae60; font-weight: bold; }
+        .error { color: #e74c3c; font-weight: bold; }
+
+        /* Success checkmark animation */
+        .success-icon {
+            display: none;
+            text-align: center;
+            font-size: 48px;
+            margin-top: 10px;
+            animation: popIn 0.4s ease-out;
+        }
+        .success-icon.visible {
+            display: block;
+        }
+        @keyframes popIn {
+            0% { transform: scale(0); opacity: 0; }
+            70% { transform: scale(1.2); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>俊宥機電打卡系統</h2>
+    <div class="clock" id="clock" aria-live="polite" aria-label="目前時間"></div>
+    <div class="date-display" id="dateDisplay"></div>
+
+    <form id="punchForm" novalidate>
+        <label for="name">姓名：</label>
+        <select name="name" id="name" required aria-required="true">
+            <option value="">請選擇姓名</option>
+            <option value="陳俊欽">陳俊欽 (免定位)</option>
+            <option value="李韋逸">李韋逸 (免定位)</option>
+            <option value="新員工">新員工 (測試用)</option>
+        </select>
+
+        <label for="action">動作：</label>
+        <select name="action" id="action" required aria-required="true">
+            <option value="">請選擇動作</option>
+            <option value="上班">上班</option>
+            <option value="下班">下班</option>
+            <option value="其他">其他</option>
+        </select>
+
+        <label for="extra">備註：</label>
+        <input type="text" id="extra" name="extra" placeholder="例如：客訪 / 洽公" aria-describedby="noteHint">
+        <div class="note-hint" id="noteHint">選擇「其他」時，建議填寫備註說明</div>
+
+        <button type="submit" id="submitBtn">送出打卡</button>
+    </form>
+    <div id="status" role="alert" aria-live="assertive"></div>
+    <div class="success-icon" id="successIcon">&#x2705;</div>
+</div>
+
+<script>
+    const scriptUrl = "https://script.google.com/macros/s/AKfycbwVhoVbpBRwSVn76INdHhJq3l1V5Eh7-RMYII-Ho6AnDbcaV_EJfqPEjIX7-Dws2WuKZQ/exec";
+    const statusDiv = document.getElementById("status");
+    const submitBtn = document.getElementById("submitBtn");
+    const successIcon = document.getElementById("successIcon");
+    const noteHint = document.getElementById("noteHint");
+    const actionSelect = document.getElementById("action");
+
+    // Exempt GPS list
+    const exemptList = ["陳俊欽", "李韋逸"];
+
+    // Real-time clock
+    function updateClock() {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+        document.getElementById("clock").textContent = timeStr;
+
+        const dateStr = now.toLocaleDateString("zh-TW", { year: "numeric", month: "long", day: "numeric", weekday: "long" });
+        document.getElementById("dateDisplay").textContent = dateStr;
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // Show hint when "其他" is selected
+    actionSelect.addEventListener("change", function() {
+        noteHint.classList.toggle("visible", this.value === "其他");
+    });
+
+    // Prevent double submission
+    let isSubmitting = false;
+
+    document.getElementById("punchForm").addEventListener("submit", function(e) {
+        e.preventDefault();
+
+        // Prevent double submit
+        if (isSubmitting) return;
+
+        const name = document.getElementById("name").value.trim();
+        const action = document.getElementById("action").value.trim();
+        const extra = document.getElementById("extra").value.trim();
+
+        // Form validation
+        if (!name) {
+            updateStatus("請選擇姓名", "error", false);
+            document.getElementById("name").focus();
+            return;
+        }
+        if (!action) {
+            updateStatus("請選擇動作", "error", false);
+            document.getElementById("action").focus();
+            return;
+        }
+        if (action === "其他" && !extra) {
+            updateStatus("選擇「其他」時請填寫備註", "error", false);
+            document.getElementById("extra").focus();
+            return;
+        }
+
+        // Disable immediately to prevent double click
+        isSubmitting = true;
+        updateStatus("正在處理中...", "loading", true);
+
+        // Check if GPS is needed
+        if (exemptList.includes(name)) {
+            sendData(name, action, extra, "", "");
+        } else {
+            if (!navigator.geolocation) {
+                updateStatus("錯誤：您的瀏覽器不支援 GPS 定位", "error", false);
+                isSubmitting = false;
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    var lat = position.coords.latitude;
+                    var lng = position.coords.longitude;
+                    sendData(name, action, extra, lat, lng);
+                },
+                function(error) {
+                    var msg = "定位失敗，請開啟 GPS 權限";
+                    if (error.code === 1) msg = "請允許網站讀取位置資訊才能打卡";
+                    updateStatus("錯誤：" + msg, "error", false);
+                    isSubmitting = false;
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
+        }
+    });
+
+    function sendData(name, action, extra, lat, lng) {
+        var params = new URLSearchParams({
+            name: name,
+            action: action,
+            extra: extra,
+            lat: lat,
+            lng: lng
+        });
+
+        var finalUrl = scriptUrl + "?" + params.toString();
+
+        fetch(finalUrl, { mode: "no-cors" })
+            .then(function() {
+                successIcon.classList.add("visible");
+                updateStatus("打卡完成！此視窗將於 3 秒後重整", "success", true);
+                setTimeout(function() {
+                    location.reload();
+                }, 3000);
+            })
+            .catch(function() {
+                updateStatus("連線錯誤，請稍後再試", "error", false);
+                isSubmitting = false;
+            });
+    }
+
+    function updateStatus(msg, className, isDisabled) {
+        statusDiv.textContent = msg;
+        statusDiv.className = className;
+        submitBtn.disabled = isDisabled;
+    }
+</script>
+
+</body>
+</html>
