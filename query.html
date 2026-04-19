@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>出勤統計報表</title>
+    <style>
+        body { font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; background: #f8f9fa; padding: 20px; padding-bottom: 80px; margin: 0; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .stat-card { background: #2c3e50; color: #fff; padding: 20px; border-radius: 15px; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .stat-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #4f6f8f; font-size: 16px; }
+        .stat-item:last-child { border-bottom: none; }
+        
+        input[type="month"] { width: 100%; padding: 12px; margin-bottom: 20px; border-radius: 10px; border: 1px solid #ddd; font-size: 16px; font-family: inherit; }
+        
+        table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; font-size: 15px; }
+        th { background: #3498db; color: #fff; }
+        
+        .nav-bar { position: fixed; bottom: 0; left: 0; width: 100%; display: flex; background: #fff; border-top: 1px solid #e0e0e0; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); }
+        .nav-bar a { flex: 1; text-align: center; padding: 15px 0; color: #95a5a6; text-decoration: none; font-weight: bold; font-size: 15px; transition: 0.3s; }
+        .nav-bar a.active { color: #9b59b6; border-top: 3px solid #9b59b6; background: #faf5ff; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="stat-card">
+        <h3 style="margin-top:0; color:#ecf0f1;">📁 當月加班總時數統計</h3>
+        <div id="statList">讀取中...</div>
+    </div>
+
+    <input type="month" id="monthBox" onchange="loadData()">
+
+    <table>
+        <thead><tr><th>姓名</th><th>類型</th><th>時間</th><th>加班時數</th></tr></thead>
+        <tbody id="tbody"></tbody>
+    </table>
+</div>
+
+<nav class="nav-bar">
+    <a href="index.html">一般員工</a>
+    <a href="support.html">支援登記</a>
+    <a href="query.html" class="active">出勤統計</a>
+</nav>
+
+<script>
+    const scriptUrl = "https://script.google.com/macros/s/AKfycbxE6t2lPZbGRaN0pF5wNXsog0-RZeTDtsn5k_sJLgBeW0ZMFNbhSsmiVkIfawyUULX5/exec";
+    const today = new Date();
+    document.getElementById("monthBox").value = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, '0');
+
+    function loadData() {
+        const m = document.getElementById("monthBox").value;
+        document.getElementById("statList").innerHTML = "讀取中...";
+        document.getElementById("tbody").innerHTML = "<tr><td colspan='4' style='text-align:center;'>資料載入中...</td></tr>";
+
+        fetch(`${scriptUrl}?method=getReport&month=${m}`).then(r => r.json()).then(data => {
+            const statHtml = data.summary.map(s => `
+                <div class="stat-item">
+                    <span>${s.name}</span>
+                    <span style="font-weight:bold; color:#f1c40f;">${s.totalOt} 小時</span>
+                </div>
+            `).join("");
+            document.getElementById("statList").innerHTML = statHtml || "<div style='color:#bdc3c7;'>本月無紀錄</div>";
+
+            document.getElementById("tbody").innerHTML = data.details.map(r => `
+                <tr>
+                    <td><strong>${r.name}</strong></td>
+                    <td style="color:#7f8c8d;">${r.type}</td>
+                    <td style="font-size:13px;">${r.time.substring(5, 16)}</td>
+                    <td style="color:${r.ot > 0 ? '#e67e22' : '#bdc3c7'}; font-weight:bold;">${r.ot > 0 ? r.ot : '-'}</td>
+                </tr>
+            `).join("");
+        });
+    }
+    loadData();
+</script>
+</body>
+</html>
